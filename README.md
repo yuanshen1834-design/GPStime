@@ -1,8 +1,10 @@
-# 极光时钟 · GPStime
+# GW天气时钟 · GPStime
 
 一个只做两件事的 Android 小工具：**用 GPS 卫星信号授时**，以及**看天气**。
 
-[下载 APK](https://github.com/yuanshen1834-design/GPStime/releases/latest) · 最低支持 Android 7.0（API 24）
+**开发者：绪山真寻**
+
+[下载 APK](https://github.com/yuanshen1834-design/GPStime/releases/latest) · 最低支持 Android 7.0（API 24） · 当前版本 3.0
 
 ## 功能
 
@@ -12,9 +14,14 @@
 - 显示经纬度、海拔、定位精度
 - 显示卫星总数、参与定位数，以及 GPS / GLONASS / Galileo / BeiDou 各系统卫星数
 
-### 网络时间对比
-- 读取 HTTP 响应头的 `Date`，得到网络时间
-- 与 GPS 时间做差，按差值大小用绿/橙/红提示
+### 网络时间 · 自动校时
+- **每 10 秒自动校时**：读取 HTTP 响应头的 `Date`，重新对齐网络时间
+- 两次校时之间，网络时间和本机时间**继续按秒走时**，不会停住
+- 实时显示“本机比网络快 / 慢多少秒”
+- 有偏差时出现「一键同步」和「系统设置」按钮：
+  - 「一键同步」在本应用内把显示时间对齐到网络时间（普通应用无权修改系统时间）
+  - 「系统设置」跳转到手机日期时间设置，可手动改系统时间
+- GPS 时间与网络时间的差值实时显示，按差值大小用绿/橙/红提示
 
 ### 天气（和风天气 QWeather）
 - 当前温度、体感、湿度、风向风力
@@ -59,7 +66,7 @@ APK 输出：`app/build/outputs/apk/debug/app-debug.apk`
 
 ```
 app/src/main/java/com/gpstime/app/
-├── MainActivity.kt          # 唯一界面：授时 + 天气
+├── MainActivity.kt          # 唯一界面：授时 + 网络校时 + 天气
 └── WeatherRepository.kt     # 和风天气接口、JSON 解析、天气图标映射
 app/src/main/res/
 ├── layout/activity_main.xml
@@ -69,7 +76,20 @@ app/src/test/java/.../WeatherParseTest.kt   # 天气 JSON 解析单元测试
 
 技术栈：Kotlin、AndroidX、Material Components、Kotlin Coroutines、LocationManager、HttpURLConnection。
 
+## 开源许可
+
+Copyright (c) 2026 绪山真寻（GitHub: [@yuanshen1834-design](https://github.com/yuanshen1834-design)）
+
+本项目采用**三许可证，任选其一**：
+
+| 许可证 | 文件 | 说明 |
+| --- | --- | --- |
+| GNU AGPL-3.0 | [LICENSE](LICENSE) | 强 copyleft，通过网络提供服务也需开放源代码 |
+| MIT | [LICENSE-MIT](LICENSE-MIT) | 最宽松，保留版权声明即可 |
+| Mozilla Public License 2.0 | [LICENSE-MPL-2.0](LICENSE-MPL-2.0) | Firefox 浏览器使用的许可证，文件级 copyleft |
+
+你可以选择其中任意一个许可证的条款来使用、修改和分发本项目。第三方组件与数据来源说明见 [NOTICE](NOTICE)。
+
 ## 说明
 - 个人自用的小工具，非官方应用，与和风天气无隶属关系
 - 天气数据版权归和风天气所有，请遵守其服务条款
-- 仓库暂未声明开源许可证；如需商用或二次分发，请先联系作者

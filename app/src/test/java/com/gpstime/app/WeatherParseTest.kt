@@ -1,3 +1,4 @@
+﻿// SPDX-License-Identifier: AGPL-3.0-only OR MIT OR MPL-2.0
 package com.gpstime.app
 
 import org.junit.Assert.assertEquals
@@ -157,3 +158,4 @@ class WeatherParseTest {
         assertEquals("晴", WeatherCode.textForIcon(100))
     }
 }
+

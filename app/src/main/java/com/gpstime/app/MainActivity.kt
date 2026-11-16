@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: AGPL-3.0-only OR MIT OR MPL-2.0
 package com.gpstime.app
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.GnssStatus
@@ -12,6 +14,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.provider.Settings
 import android.text.InputType
 import android.view.View
 import android.widget.FrameLayout
@@ -27,8 +31,11 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -37,6 +44,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
 
@@ -50,6 +58,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvNetworkTimezone: TextView
     private lateinit var tvNetworkStatus: TextView
     private lateinit var btnNetworkTime: MaterialButton
+    private lateinit var tvLocalTime: TextView
+    private lateinit var tvLocalDiff: TextView
+    private lateinit var btnSyncTime: MaterialButton
+    private lateinit var btnTimeSettings: MaterialButton
+    private lateinit var tvSyncHint: TextView
     private lateinit var tvTimeDiff: TextView
     private lateinit var tvLocationInfo: TextView
     private lateinit var tvSatelliteInfo: TextView
@@ -73,7 +86,20 @@ class MainActivity : AppCompatActivity() {
     private var isGPSTracking = false
 
     private var gpsTime: Long = 0
-    private var networkTime: Long = 0
+    private var gpsFixElapsed: Long = 0
+    private var networkBaseMs: Long = 0
+    private var networkAnchorElapsed: Long = 0
+    private var networkFetching = false
+    private var timeOffsetMs = 0L
+    private var autoTimeJob: Job? = null
+    private val clockHandler = Handler(Looper.getMainLooper())
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            updateClockDisplays()
+            updateTimeDifference()
+            clockHandler.postDelayed(this, 1000L)
+        }
+    }
 
     private lateinit var dateFormat: SimpleDateFormat
     private lateinit var timeFormat: SimpleDateFormat
@@ -161,6 +187,11 @@ class MainActivity : AppCompatActivity() {
         tvNetworkTimezone = findViewById(R.id.tvNetworkTimezone)
         tvNetworkStatus = findViewById(R.id.tvNetworkStatus)
         btnNetworkTime = findViewById(R.id.btnNetworkTime)
+        tvLocalTime = findViewById(R.id.tvLocalTime)
+        tvLocalDiff = findViewById(R.id.tvLocalDiff)
+        btnSyncTime = findViewById(R.id.btnSyncTime)
+        btnTimeSettings = findViewById(R.id.btnTimeSettings)
+        tvSyncHint = findViewById(R.id.tvSyncHint)
         tvTimeDiff = findViewById(R.id.tvTimeDiff)
         tvLocationInfo = findViewById(R.id.tvLocationInfo)
         tvSatelliteInfo = findViewById(R.id.tvSatelliteInfo)
@@ -189,7 +220,30 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnNetworkTime.setOnClickListener { fetchNetworkTime() }
+        btnNetworkTime.setOnClickListener {
+            scope.launch { refreshNetworkTime(auto = false) }
+        }
+
+        btnSyncTime.setOnClickListener {
+            val net = currentNetworkTime()
+            if (net <= 0) {
+                Toast.makeText(this, getString(R.string.network_waiting), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            timeOffsetMs = net - System.currentTimeMillis()
+            tvSyncHint.visibility = View.VISIBLE
+            updateClockDisplays()
+            updateTimeDifference()
+            Toast.makeText(this, getString(R.string.synced_toast), Toast.LENGTH_SHORT).show()
+        }
+
+        btnTimeSettings.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_DATE_SETTINGS))
+            } catch (e: Exception) {
+                runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+            }
+        }
 
         btnWeatherRefresh.setOnClickListener { refreshWeather() }
         btnWeatherCity.setOnClickListener { showCityDialog() }
@@ -324,6 +378,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleNewLocation(location: Location) {
         gpsTime = location.time
+        gpsFixElapsed = SystemClock.elapsedRealtime()
         lastLocation = location
         updateGPSTimeDisplay()
         updateLocationInfo(location)
@@ -411,25 +466,50 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------- 网络时间 ----------------
 
-    private fun fetchNetworkTime() {
-        tvNetworkStatus.text = getString(R.string.fetching_network_time)
-        btnNetworkTime.isEnabled = false
+    private suspend fun refreshNetworkTime(auto: Boolean) {
+        if (networkFetching) return
+        networkFetching = true
 
-        scope.launch {
-            val time = withContext(Dispatchers.IO) {
-                runCatching { getNetworkTimeFromHeaders() }.getOrNull()
-            }
-            btnNetworkTime.isEnabled = true
-            if (time == null) {
+        if (!auto) {
+            tvNetworkStatus.text = getString(R.string.fetching_network_time)
+            btnNetworkTime.isEnabled = false
+        }
+
+        val time = withContext(Dispatchers.IO) {
+            runCatching { getNetworkTimeFromHeaders() }.getOrNull()
+        }
+
+        networkFetching = false
+        if (!auto) btnNetworkTime.isEnabled = true
+
+        if (time == null) {
+            if (!auto) {
                 tvNetworkStatus.text = getString(R.string.network_error)
-                Toast.makeText(this@MainActivity, getString(R.string.network_error), Toast.LENGTH_SHORT).show()
-                return@launch
+                Toast.makeText(this, getString(R.string.network_error), Toast.LENGTH_SHORT).show()
+            } else if (networkBaseMs == 0L) {
+                tvNetworkStatus.text = getString(R.string.network_auto_retry)
             }
+            return
+        }
 
-            networkTime = time
-            updateNetworkTimeDisplay()
-            updateTimeDifference()
-            tvNetworkStatus.text = getString(R.string.network_time_success)
+        networkBaseMs = time
+        networkAnchorElapsed = SystemClock.elapsedRealtime()
+        tvNetworkStatus.text = if (auto) {
+            getString(R.string.network_auto_status)
+        } else {
+            getString(R.string.network_time_success)
+        }
+        updateClockDisplays()
+        updateTimeDifference()
+    }
+
+    private fun startAutoNetworkTime() {
+        autoTimeJob?.cancel()
+        autoTimeJob = scope.launch {
+            while (isActive) {
+                refreshNetworkTime(auto = true)
+                delay(10_000L)
+            }
         }
     }
 
@@ -464,20 +544,70 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        return System.currentTimeMillis()
+        return null
     }
 
-    private fun updateNetworkTimeDisplay() {
-        if (networkTime > 0) {
-            val date = Date(networkTime)
+    private fun currentNetworkTime(): Long {
+        if (networkBaseMs <= 0L) return 0L
+        return networkBaseMs + (SystemClock.elapsedRealtime() - networkAnchorElapsed)
+    }
+
+    private fun currentGpsTime(): Long {
+        if (gpsTime <= 0L) return 0L
+        return gpsTime + (SystemClock.elapsedRealtime() - gpsFixElapsed)
+    }
+
+    private fun updateClockDisplays() {
+        val net = currentNetworkTime()
+        if (net > 0L) {
+            val date = Date(net)
             tvNetworkDate.text = dateFormat.format(date)
             tvNetworkTime.text = timeFormat.format(date)
         }
+
+        val local = System.currentTimeMillis() + timeOffsetMs
+        tvLocalTime.text = getString(R.string.local_time_value, timeFormat.format(Date(local)))
+
+        if (net <= 0L) {
+            tvLocalDiff.text = ""
+            btnSyncTime.visibility = View.GONE
+            btnTimeSettings.visibility = View.GONE
+            return
+        }
+
+        val diff = net - local
+        val absolute = abs(diff)
+        tvLocalDiff.text = when {
+            absolute < 1000 -> getString(R.string.local_time_same)
+            diff > 0 -> getString(R.string.local_time_slow, formatSeconds(absolute))
+            else -> getString(R.string.local_time_fast, formatSeconds(absolute))
+        }
+
+        val showSync = absolute >= 1000
+        btnSyncTime.visibility = if (showSync) View.VISIBLE else View.GONE
+        btnTimeSettings.visibility = if (showSync) View.VISIBLE else View.GONE
+        if (showSync) tvSyncHint.visibility = View.VISIBLE
+    }
+
+    private fun formatSeconds(ms: Long): String =
+        if (ms % 1000 == 0L) (ms / 1000).toString()
+        else String.format(Locale.US, "%.1f", ms / 1000.0)
+
+    private fun startClock() {
+        clockHandler.removeCallbacks(clockRunnable)
+        clockHandler.post(clockRunnable)
+    }
+
+    private fun stopClock() {
+        clockHandler.removeCallbacks(clockRunnable)
     }
 
     private fun updateTimeDifference() {
-        if (gpsTime > 0 && networkTime > 0) {
-            val diff = Math.abs(gpsTime - networkTime)
+        val gps = currentGpsTime()
+        val net = currentNetworkTime()
+
+        if (gps > 0 && net > 0) {
+            val diff = abs(gps - net)
             val diffSeconds = diff / 1000
             val diffMillis = diff % 1000
 
@@ -492,10 +622,10 @@ class MainActivity : AppCompatActivity() {
                 diff < 5000 -> tvTimeDiff.setTextColor(ContextCompat.getColor(this, android.R.color.holo_orange_dark))
                 else -> tvTimeDiff.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
             }
-        } else if (gpsTime > 0) {
-            tvTimeDiff.text = "GPS: ${fullFormat.format(Date(gpsTime))}"
-        } else if (networkTime > 0) {
-            tvTimeDiff.text = "网络: ${fullFormat.format(Date(networkTime))}"
+        } else if (gps > 0) {
+            tvTimeDiff.text = "GPS: ${fullFormat.format(Date(gps))}"
+        } else if (net > 0) {
+            tvTimeDiff.text = "网络: ${fullFormat.format(Date(net))}"
         } else {
             tvTimeDiff.text = "--"
         }
@@ -821,7 +951,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        startClock()
+        startAutoNetworkTime()
+    }
+
+    override fun onPause() {
+        stopClock()
+        autoTimeJob?.cancel()
+        autoTimeJob = null
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        stopClock()
+        autoTimeJob?.cancel()
         scope.cancel()
         locationManager?.removeUpdates(locationListener)
         runCatching { locationManager?.unregisterGnssStatusCallback(gnssStatusCallback) }
@@ -833,6 +978,8 @@ class MainActivity : AppCompatActivity() {
         private const val WEATHER_REFRESH_INTERVAL_MS = 15 * 60 * 1000L
     }
 }
+
+
 
 
 

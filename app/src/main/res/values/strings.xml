@@ -1,6 +1,6 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">极光时钟</string>
+    <string name="app_name">GW天气时钟</string>
     <string name="back">返回</string>
     <string name="forward">前进</string>
     <string name="refresh">刷新</string>
@@ -108,6 +108,21 @@
     <string name="weather_quota_error">今日调用次数已用完（免费版 1000 次/天）</string>
     <string name="weather_bad_location">定位精度还不够，正在等更好的 GPS 信号…</string>
     <string name="weather_accuracy">精度 %1$s 米</string>
+
+    <!-- 校时 -->
+    <string name="network_auto_status">自动校时 · 每 10 秒</string>
+    <string name="network_auto_retry">自动校时失败，10 秒后重试…</string>
+    <string name="network_waiting">正在等待网络时间，请稍候</string>
+    <string name="local_time_placeholder">本机时间 --:--:--</string>
+    <string name="local_time_value">本机时间 %1$s</string>
+    <string name="local_time_same">本机与网络时间一致</string>
+    <string name="local_time_fast">本机比网络快 %1$s 秒</string>
+    <string name="local_time_slow">本机比网络慢 %1$s 秒</string>
+    <string name="sync_time">一键同步</string>
+    <string name="time_settings">系统设置</string>
+    <string name="sync_hint">同步只校正本应用显示；修改手机时间需在系统设置中手动操作</string>
+    <string name="synced_toast">已在本应用内同步到网络时间</string>
+    <string name="about_line">开发者：绪山真寻 · GW天气时钟 v3.0\n开源许可：AGPL-3.0 / MIT / MPL-2.0</string>
 </resources>
 
 

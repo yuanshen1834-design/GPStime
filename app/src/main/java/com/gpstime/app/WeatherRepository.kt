@@ -1,3 +1,4 @@
+﻿// SPDX-License-Identifier: AGPL-3.0-only OR MIT OR MPL-2.0
 package com.gpstime.app
 
 import android.content.SharedPreferences
@@ -241,3 +242,4 @@ object WeatherCode {
         else -> "🌡️"
     }
 }
+

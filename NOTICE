@@ -1,0 +1,24 @@
+GW天气时钟 (GPStime)
+Copyright (c) 2026 绪山真寻 (GitHub: @yuanshen1834-design)
+
+开发者：绪山真寻
+项目主页：https://github.com/yuanshen1834-design/GPStime
+
+本项目采用三许可证，任选其一：
+
+  * GNU Affero General Public License v3.0 (AGPL-3.0) —— 见 LICENSE
+  * MIT License —— 见 LICENSE-MIT
+  * Mozilla Public License 2.0 (MPL-2.0，Firefox 浏览器使用的许可证) —— 见 LICENSE-MPL-2.0
+
+你可以选择上述任意一个许可证的条款来使用、修改和分发本项目。
+各许可证的完整文本已随仓库提供，若三者条款存在冲突，以你所选许可证的条款为准。
+
+第三方组件与数据来源：
+
+  * AndroidX（Apache License 2.0）
+  * Material Components for Android（Apache License 2.0）
+  * Kotlin / kotlinx.coroutines（Apache License 2.0）
+  * 和风天气 QWeather 天气与 GeoAPI 数据（受和风天气服务条款约束）
+  * Mozilla Public License 2.0 文本来自 Mozilla；AGPL-3.0、MIT 文本来自 SPDX License List
+
+天气数据版权归和风天气所有。本项目与和风天气、Mozilla 均无隶属关系。
